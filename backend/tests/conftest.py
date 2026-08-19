@@ -13,7 +13,7 @@ class FakeEngine:
         self.lock = Lock()
         self.error = error
 
-    def convert(self, _input_path: Path, _result_dir: Path, _output_stem: str):
+    def convert(self, _input_path: Path, _result_dir: Path, _output_stem: str, _options):
         if self.error:
             raise self.error
         raise AssertionError("Unexpected conversion call")

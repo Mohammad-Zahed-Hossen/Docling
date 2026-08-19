@@ -1,5 +1,5 @@
 import { CONNECTION_TIMEOUT_MS, CONVERSION_TIMEOUT_MS } from "./constants";
-import type { ApiErrorPayload, ConversionResult } from "./types";
+import type { ApiErrorPayload, ConversionOptions, ConversionResult } from "./types";
 
 export class LocalEngineError extends Error {
   constructor(message: string, public readonly code: string) {
@@ -23,9 +23,26 @@ export async function checkHealth(apiUrl: string): Promise<boolean> {
   return isHealthResponse(value);
 }
 
-export async function convertPdf(apiUrl: string, file: File): Promise<ConversionResult> {
+export async function checkHealthWithRetry(
+  apiUrl: string,
+  attempts: number,
+  delayMs: number,
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      if (await checkHealth(apiUrl)) return true;
+    } catch {
+      // The local engine may still be starting after Windows login.
+    }
+    if (attempt < attempts) await delay(delayMs);
+  }
+  return false;
+}
+
+export async function convertDocument(apiUrl: string, file: File, options: ConversionOptions): Promise<ConversionResult> {
   const data = new FormData();
   data.append("file", file);
+  Object.entries(options).forEach(([key, value]) => data.append(key, String(value)));
   let response: Response;
   try {
     response = await fetchWithTimeout(
@@ -38,7 +55,7 @@ export async function convertPdf(apiUrl: string, file: File): Promise<Conversion
       throw new LocalEngineError("The local processing request timed out.", "TIMEOUT");
     }
     throw new LocalEngineError(
-      "Could not connect to the local Docling engine. Confirm it is running and that this site is allowed by CORS.",
+      "Could not connect to the local converter. Confirm it is running and that this site is allowed by CORS.",
       "LOCAL_ENGINE_ERROR",
     );
   }
@@ -62,4 +79,8 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeout: number)
 
 function isHealthResponse(value: unknown): value is { status: "ok" } {
   return typeof value === "object" && value !== null && "status" in value && value.status === "ok";
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

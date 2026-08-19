@@ -22,11 +22,14 @@ export function ResultViewer({ result, apiUrl }: { result: ConversionResult; api
         </div>
       </div>
       <dl className="metadata">
+        <div><dt>Engine</dt><dd>{engineLabel(result.metadata.engine)}</dd></div>
         {result.metadata.pages !== null && <div><dt>Pages</dt><dd>{result.metadata.pages}</dd></div>}
         <div><dt>Processing time</dt><dd>{result.metadata.processing_seconds.toFixed(1)}s</dd></div>
         <div><dt>Figures</dt><dd>{result.metadata.figures}</dd></div>
         <div><dt>Table images</dt><dd>{result.metadata.table_images}</dd></div>
       </dl>
+      <p className="engine-reason">{result.metadata.engine_reason}{result.metadata.cache_hit ? " Cached result." : ""}</p>
+      {result.metadata.warnings.length > 0 && <div className="result-warnings">{result.metadata.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
       <div className="viewer-tabs" role="tablist" aria-label="Result view">
         <button role="tab" aria-selected={tab === "preview"} onClick={() => setTab("preview")}>Preview</button>
         <button role="tab" aria-selected={tab === "markdown"} onClick={() => setTab("markdown")}>Markdown</button>
@@ -41,3 +44,5 @@ export function ResultViewer({ result, apiUrl }: { result: ConversionResult; api
     </section>
   );
 }
+
+function engineLabel(engine: string): string { return engine === "pymupdf4llm" ? "PyMuPDF4LLM" : engine === "markitdown" ? "MarkItDown" : "Docling"; }

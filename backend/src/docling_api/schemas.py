@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    service: Literal["docling-local-engine"] = "docling-local-engine"
+    service: Literal["unified-markdown-converter"] = "unified-markdown-converter"
 
 
 class ErrorBody(BaseModel):
@@ -24,6 +24,11 @@ class ConversionMetadata(BaseModel):
     processing_seconds: float
     figures: int
     table_images: int
+    engine: str
+    engine_reason: str
+    warnings: list[str] = []
+    cache_hit: bool = False
+    fallback_reason: str | None = None
 
 
 class ConversionResponse(BaseModel):

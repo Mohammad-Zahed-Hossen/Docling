@@ -1,53 +1,88 @@
-# Docling
+# Unified Markdown Converter
 
-Docling is a single-purpose document utility for converting complex academic PDFs into layout-aware Markdown with [IBM Docling](https://github.com/docling-project/docling). It provides a safe in-browser preview, raw Markdown copy, a Markdown download, and a ZIP containing Markdown plus extracted figure and table images.
+A local-first, CPU-only converter that produces one portable Markdown file and an optional
+`assets/` directory. The browser talks directly to a FastAPI service bound to `127.0.0.1`;
+documents are not proxied through the hosted Next.js frontend.
 
-## Architecture
+## Routing
 
 ```text
-Vercel (static Next.js frontend)
-              │ browser fetch from the client
-              ▼
-http://127.0.0.1:8000 (local FastAPI service)
-              │
-              ▼
-        Docling on Windows
-              │
-              ├── Markdown
-              ├── assets/*.png
-              └── ZIP package
+input
+  ├─ supported non-PDF ───────────────► MarkItDown
+  └─ PDF ─► lightweight inspection
+              ├─ digital/ordinary ────► PyMuPDF4LLM
+              │                           └─ poor extraction in Balanced mode ─► Docling
+              └─ scanned/complex ─────► Docling
 ```
 
-The PDF request originates in the browser and goes directly to the loopback FastAPI service. There is no Next.js API route, Vercel proxy, telemetry, analytics, cloud storage, or external document upload in this project.
+Supported V1 inputs: PDF, DOCX, PPTX, XLSX, HTML, CSV, TXT, and MD.
 
-The backend is local because Docling has substantial native/model runtime requirements and local execution keeps this personal workflow under the user's control. The backend binds to `127.0.0.1` by default, so it is not exposed to the LAN.
+Modes:
 
-## Prerequisites
+- **Fast** uses PyMuPDF4LLM for PDF and MarkItDown for other supported formats.
+- **Balanced** is the default. It inspects PDFs, uses the fast path when appropriate, and
+  falls back to Docling only when a conservative quality gate detects a poor extraction.
+- **High Accuracy** selects Docling for difficult PDFs while retaining the fast path for
+  ordinary digital PDFs.
 
-- Git
-- Node.js (current LTS or newer)
-- [uv](https://docs.astral.sh/uv/)
-- Python 3.12, managed by uv (uv can install it automatically)
+Manual engine selection remains available. Docling and PyMuPDF4LLM are PDF-only in V1.
 
-Do not install project Python packages globally.
+## Output
 
-## Backend setup
+The public result is exactly:
+
+```text
+document-name.md
+assets/                 # only when useful assets were extracted
+├── figure-001.png
+└── table-001.png
+```
+
+The downloadable ZIP contains only that Markdown file and optional assets. Cache manifests,
+inspection data, and temporary files remain internal.
+
+Markdown is normalized deterministically: line endings, heading spacing, list markers,
+conservative PDF line-wrap repair, blank lines, control characters, code fences, relative
+asset paths, and stable asset names. No LLM rewrites document content.
+
+## Daily Windows use
+
+1. Windows starts the local backend through the current-user Startup entry.
+2. Open the installed/pinned web app.
+3. Drop a supported file, normally leaving **Auto** and **Balanced** selected.
+4. Convert, preview, and download the Markdown or package.
+
+VS Code, a terminal, and manual virtual-environment activation are not required for daily use.
+Double-click `scripts/manage-backend.bat` for Status, Start, Stop, or Restart.
+
+The launcher prevents duplicate healthy processes, runs without development reload, binds only
+to `127.0.0.1`, and writes diagnostics under `runtime/`.
+
+## First-time setup
+
+Requirements: Git, current Node.js LTS, and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
 cd backend
 uv sync
-uv run python -m docling_api
+cd ..
+powershell -ExecutionPolicy Bypass -File .\scripts\prefetch-models.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
+.\scripts\start-backend.bat
 ```
 
-Open `http://127.0.0.1:8000/api/health` to verify the service. The normal response is:
+Health check:
 
 ```json
-{"status":"ok","service":"docling-local-engine"}
+{"status":"ok","service":"unified-markdown-converter"}
 ```
 
-The first real conversion downloads Docling/OCR model files and may take substantially longer than later conversions. No API token is required.
+## Development
 
-## Frontend setup
+```powershell
+cd backend
+uv run uvicorn docling_api.main:app --host 127.0.0.1 --port 8000
+```
 
 ```powershell
 cd frontend
@@ -55,124 +90,47 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The default local engine URL is `http://127.0.0.1:8000`; it can be changed and reset from Settings. The value is stored only in browser `localStorage`.
-
-## Development and checks
-
-Run the backend and frontend in separate terminals. Useful checks are:
+Focused verification:
 
 ```powershell
 cd backend
-uv sync
+uv run ruff check src tests scripts
 uv run pytest
-uv run ruff check .
+uv run python scripts/benchmark_unified.py "C:\path\digital.pdf" "C:\path\notes.docx"
 
 cd ..\frontend
 npm run lint
 npm run build
 ```
 
-Unit tests mock the expensive conversion boundary. For an integration check, start the backend and submit a small real PDF through the UI.
+## API
 
-## Windows normal usage
+- `GET /api/health`
+- `POST /api/convert`
+- result download routes returned by the conversion response
 
-Double-click:
+`POST /api/convert` accepts multipart `file` plus `converter`, `mode`, `ocr`, `images`,
+`image_descriptions`, `cpu`, and `cache`. One heavy conversion runs at a time. A concurrent
+request receives `BACKEND_BUSY`.
 
-```text
-scripts\start-backend.bat
-```
-
-It locates `backend`, checks for uv, and starts the production server at `127.0.0.1:8000` without reload mode. Keep its terminal window open; press `Ctrl+C` or close the window to stop it.
-
-For a desktop shortcut, right-click `scripts\start-backend.bat`, choose **Show more options → Send to → Desktop (create shortcut)**, and rename the shortcut to `Docling Local Engine`. A visible window is intentional so the process can be stopped or restarted without leaving an invisible orphan.
-
-## API and result lifecycle
-
-`POST /api/convert` accepts one multipart field named `file`. It validates extension, content type, size, PDF signature, and emptiness, then processes one conversion at a time. A concurrent request receives `ENGINE_BUSY` instead of starting another model pipeline.
-
-The response contains Markdown, honest conversion metadata, a result identifier, and relative URLs for the Markdown and ZIP downloads. Images are never base64-encoded into frontend state. Input jobs are deleted after each request; results live in the operating-system temporary directory and expire after 60 minutes by default. Expired results are pruned on startup and when another conversion begins.
-
-Errors follow one JSON shape:
+Errors use a stable shape without tracebacks or local filesystem paths:
 
 ```json
-{"error":{"code":"INVALID_FILE","message":"Only PDF files are supported."}}
+{"error":{"code":"UNSUPPORTED_FORMAT","message":"This file format is not supported."}}
 ```
-
-Internal tracebacks and filesystem paths are logged locally, not returned to the browser.
-
-## Output format
-
-The ZIP has no unnecessary outer directory:
-
-```text
-paper-docling.zip
-├── paper.md
-└── assets/
-    ├── figure-001.png
-    └── table-001.png
-```
-
-Markdown uses relative forward-slash references such as `assets/figure-001.png`, making the extracted folder convenient for Markdown tools, including Notion's **Import → Text & Markdown** workflow. A table remains structured Markdown when Docling recovers it; a rendered table image is additionally included when available.
 
 ## Configuration
 
-Backend defaults work without an `.env`. Copy `backend/.env.example` to `backend/.env` only when configuration is needed.
+Backend defaults work without an `.env`. Relevant optional variables are documented in
+`backend/.env.example`, including upload size, allowed frontend origins, result expiry,
+Docling CPU threads, table mode, and OCR bitmap threshold.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `HOST` | `127.0.0.1` | Launcher/server bind host |
-| `PORT` | `8000` | Launcher/server port |
-| `MAX_UPLOAD_MB` | `100` | Upload limit |
-| `ALLOWED_ORIGINS` | local development origins | Comma-separated exact frontend origins |
-| `TEMP_DIRECTORY` | OS temp directory | Job/result root |
-| `RESULT_TTL_MINUTES` | `60` | Temporary result lifetime |
-| `LOG_LEVEL` | `INFO` | Local logging level |
+The cache key includes file content, conversion settings, and the selected Auto result. Repeated
+conversions restore Markdown and assets without running an engine again.
 
-The included launcher uses these centralized settings and defaults to the security-sensitive loopback address `127.0.0.1:8000`. If an exact production Vercel origin is used, add it to `ALLOWED_ORIGINS`, for example:
+## Current image-description behavior
 
-```dotenv
-ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://your-app.vercel.app
-```
-
-Do not use `*`.
-
-## Vercel deployment
-
-Connect this GitHub repository to Vercel using:
-
-- Framework Preset: **Next.js**
-- Root Directory: **frontend**
-- Build Command: default (`next build`)
-- Output Directory: default
-- Environment variables: none required
-
-Commits to the configured production branch deploy only the frontend. The Python backend is not part of the Vercel build.
-
-After deployment, add the exact HTTPS deployment origin to the local backend's `ALLOWED_ORIGINS`, restart the backend, and use the frontend Settings panel to confirm `http://127.0.0.1:8000`.
-
-## Installed web app
-
-The frontend includes a web app manifest, theme metadata, and an app icon, so supported Chromium browsers can open it in a standalone app window through **Install this site as an app**. A service worker is intentionally omitted: document conversion requires the local backend and the UI is not presented as offline-capable.
-
-## Troubleshooting
-
-- **`uv` is unavailable:** install uv, reopen the terminal, and confirm `uv --version` works. Do not activate `.venv` manually.
-- **Backend is disconnected:** run `scripts\start-backend.bat`, visit `/api/health`, then choose **Retry connection** in the UI.
-- **First conversion is slow:** Docling may download and initialize local OCR/layout models. Keep the launcher window open and wait for completion.
-- **CORS error:** add the frontend's exact origin (scheme, host, and port) to `ALLOWED_ORIGINS`, then restart the backend.
-- **Vercel UI works but says disconnected:** deployment covers only the UI. The Windows backend must be running on the same computer as the browser.
-- **Browser blocks localhost/private-network access:** allow the browser's local-network permission if prompted, verify no extension or corporate policy blocks loopback HTTP, and test `/api/health` directly. The PDF is not processed by Vercel.
-- **Timeout or engine disappears:** restart the launcher and retry. The frontend uses a 30-minute conversion timeout and reports local connectivity separately.
-- **Conversion fails:** inspect the visible backend window for local diagnostics. The browser intentionally receives only a safe error message.
-
-## Repository setup
-
-The repository is intended for `https://github.com/Mohammad-Zahed-Hossen/Docling.git`. After reviewing the working tree:
-
-```powershell
-git add .
-git commit -m "feat: initialize Docling web and local processing app"
-git push -u origin main
-```
-
-Never force-push over unrelated remote history.
+Conversion never requires a VLM. The UI exposes Off, Smart, and All, but this repository does
+not bundle a local vision model. When Smart or All is selected, existing captions are preserved
+and the result reports that local image descriptions are not configured. This avoids silently
+adding a large CPU model without a measured quality and latency benefit.

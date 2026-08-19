@@ -1,4 +1,7 @@
 export type ConnectionState = "checking" | "connected" | "disconnected";
+export type ConverterName = "auto" | "pymupdf4llm" | "docling" | "markitdown";
+export type ConversionMode = "fast" | "balanced" | "high_accuracy";
+export interface ConversionOptions { converter: ConverterName; mode: ConversionMode; ocr: "auto" | "off" | "force"; images: "ignore" | "extract"; image_descriptions: "off" | "smart" | "all"; cpu: "balanced" | "maximum"; cache: boolean; }
 
 export interface ConversionMetadata {
   original_filename: string;
@@ -7,6 +10,11 @@ export interface ConversionMetadata {
   processing_seconds: number;
   figures: number;
   table_images: number;
+  engine: string;
+  engine_reason: string;
+  warnings: string[];
+  cache_hit: boolean;
+  fallback_reason: string | null;
 }
 
 export interface ConversionResult {

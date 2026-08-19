@@ -1,5 +1,5 @@
 {
-  "name": "Docling Local Document Converter",
+  "name": "Unified Markdown Converter",
   "short_name": "Docling",
   "description": "Convert academic PDFs with a local Docling engine.",
   "start_url": "/",
