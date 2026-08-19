@@ -11,10 +11,14 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
     max_upload_mb: int = Field(default=100, ge=1, le=1000)
-    allowed_origins: Annotated[list[str], NoDecode] = ["*"]
+    allowed_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://docling-azure.vercel.app",
+    ]
     temp_directory: Path = Path(gettempdir()) / "docling-local-engine"
     result_ttl_minutes: int = Field(default=60, ge=5, le=1440)
     log_level: str = "INFO"
