@@ -8,7 +8,7 @@ import httpx
 
 from .config import Settings
 
-USER_AGENT = "UnifiedMarkdownConverter/1.0 (+local public-webpage converter)"
+USER_AGENT = "DoclingConverter/1.0 (https://github.com/Mohammad-Zahed-Hossen/Docling; local@docling.internal)"
 DOCUMENT_TYPES = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
