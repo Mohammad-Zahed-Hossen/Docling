@@ -38,9 +38,8 @@ if (Test-EngineHealth) {
 
 if ($Background) {
     New-Item -ItemType Directory -Path $RuntimeDirectory -Force | Out-Null
-    $UvPath = (Get-Command uv).Source
-    $Process = Start-Process -FilePath $UvPath `
-        -ArgumentList @("run", "python", "-m", "docling_api") `
+    $Process = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList @("/c", "uv", "run", "python", "-m", "docling_api") `
         -WorkingDirectory $BackendDirectory `
         -WindowStyle Hidden `
         -RedirectStandardOutput $OutputLogFile `
