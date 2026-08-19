@@ -3,14 +3,14 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Docling",
-  description: "Convert academic PDFs to layout-aware Markdown with your local Docling engine.",
-  applicationName: "Docling",
+  title: "Markdown Converter",
+  description: "Convert documents to structured Markdown with a local processing engine.",
+  applicationName: "Markdown Converter",
   manifest: "/manifest.webmanifest",
   icons: [{ rel: "icon", url: "/icon.svg", type: "image/svg+xml" }],
 };
 
-export const viewport: Viewport = { themeColor: "#f5f5f2", colorScheme: "light" };
+export const viewport: Viewport = { themeColor: "#f5f5f2", colorScheme: "light dark" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

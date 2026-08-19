@@ -1,5 +1,6 @@
 export const DEFAULT_API_URL = "http://127.0.0.1:8000";
 export const API_URL_STORAGE_KEY = "docling-api-url";
+export const OPTIONS_STORAGE_KEY = "docling-conversion-options";
 export const CONNECTION_TIMEOUT_MS = 5_000;
 export const STARTUP_HEALTH_ATTEMPTS = 6;
 export const STARTUP_HEALTH_DELAY_MS = 5_000;

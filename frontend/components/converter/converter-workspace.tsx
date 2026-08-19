@@ -1,10 +1,10 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, LoaderCircle, LockKeyhole, RefreshCw, Settings } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, LoaderCircle, LockKeyhole, RefreshCw, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { checkHealthWithRetry, convertDocument, LocalEngineError, normalizeApiUrl } from "@/lib/api";
-import { API_URL_STORAGE_KEY, DEFAULT_API_URL, MAX_CLIENT_FILE_MB, STARTUP_HEALTH_ATTEMPTS, STARTUP_HEALTH_DELAY_MS } from "@/lib/constants";
-import type { ConnectionState, ConversionMode, ConversionOptions, ConversionResult, ConverterName } from "@/lib/types";
+import { API_URL_STORAGE_KEY, DEFAULT_API_URL, MAX_CLIENT_FILE_MB, OPTIONS_STORAGE_KEY, STARTUP_HEALTH_ATTEMPTS, STARTUP_HEALTH_DELAY_MS } from "@/lib/constants";
+import type { ConnectionState, ConversionOptions, ConversionResult } from "@/lib/types";
 import { MarkIcon } from "@/components/ui/icons";
 import { FileDropzone } from "./file-dropzone";
 import { ResultViewer } from "./result-viewer";
@@ -16,6 +16,7 @@ export function ConverterWorkspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [options, setOptions] = useState<ConversionOptions>({ converter: "auto", mode: "balanced", ocr: "auto", images: "extract", image_descriptions: "off", cpu: "balanced", cache: true });
@@ -29,22 +30,33 @@ export function ConverterWorkspace() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem(API_URL_STORAGE_KEY);
+      const storedOptions = window.localStorage.getItem(OPTIONS_STORAGE_KEY);
       const initial = stored || DEFAULT_API_URL;
+      if (storedOptions) {
+        try { setOptions((current) => ({ ...current, ...JSON.parse(storedOptions) as Partial<ConversionOptions> })); } catch { /* Ignore stale preferences. */ }
+      }
       setApiUrlState(initial);
       void retry(initial, STARTUP_HEALTH_ATTEMPTS);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!processing) return;
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [processing]);
+
   const updateApiUrl = (value: string) => { setApiUrlState(value); window.localStorage.setItem(API_URL_STORAGE_KEY, value); setConnection("disconnected"); };
   const reset = () => { updateApiUrl(DEFAULT_API_URL); void retry(DEFAULT_API_URL); };
+  const updateOptions = (value: ConversionOptions) => { setOptions(value); window.localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(value)); };
   const selectFile = (value: File | null) => {
     if (value && value.size > MAX_CLIENT_FILE_MB * 1024 * 1024) { setError(`The file exceeds the ${MAX_CLIENT_FILE_MB} MB upload limit.`); return; }
     setFile(value); setResult(null); setError(null);
   };
   const convert = async () => {
     if (!file) return;
-    setProcessing(true); setError(null); setResult(null);
+    setElapsed(0); setProcessing(true); setError(null); setResult(null);
     try { setResult(await convertDocument(normalizeApiUrl(apiUrl), file, options)); }
     catch (caught) { if (caught instanceof LocalEngineError) { setError(caught.message); if (caught.code === "LOCAL_ENGINE_ERROR") setConnection("disconnected"); } else setError("The conversion could not be completed."); }
     finally { setProcessing(false); }
@@ -54,30 +66,38 @@ export function ConverterWorkspace() {
     <main>
       <header className="app-header">
         <div className="brand"><MarkIcon /><span><strong>Markdown Converter</strong><small>Local · CPU-first</small></span></div>
-        <div className="header-actions"><ConnectionBadge state={connection} /><button className="icon-button" onClick={() => setSettingsOpen((v) => !v)} aria-label="Open local engine settings"><Settings size={18} /></button></div>
+        <div className="header-actions"><ConnectionBadge state={connection} /><button className="settings-button" onClick={() => setSettingsOpen(true)} aria-label="Open settings" aria-haspopup="dialog"><Settings size={17} /><span>Settings</span></button></div>
       </header>
       <div className="workspace">
-        <SettingsPanel open={settingsOpen} apiUrl={apiUrl} onApiUrlChange={updateApiUrl} onReset={reset} onClose={() => setSettingsOpen(false)} onRetry={() => void retry()} options={options} onOptionsChange={setOptions} />
-        <section className="intro"><span className="eyebrow"><LockKeyhole size={14} /> Private, local processing</span><h1>Documents to clean Markdown</h1><p>Auto routing chooses the fast PDF path, the high-accuracy fallback, or the general document converter. Files stay on this computer.</p></section>
-        {connection === "disconnected" && <div className="notice warning" role="status"><AlertCircle /><span><strong>Local converter is not running</strong><small>Start Markdown Converter from Windows Start, then retry the connection.</small></span><button className="button secondary" onClick={() => void retry()}><RefreshCw size={15} /> Retry connection</button></div>}
+        <SettingsPanel open={settingsOpen} apiUrl={apiUrl} onApiUrlChange={updateApiUrl} onReset={reset} onClose={() => setSettingsOpen(false)} onRetry={() => void retry()} options={options} onOptionsChange={updateOptions} />
+        {!result && !processing && <section className="intro"><span className="eyebrow"><LockKeyhole size={14} /> Processed locally</span><h1>Documents to clean Markdown</h1><p>Drop one document, choose how it should be converted, then inspect or download the result.</p></section>}
+        {connection === "disconnected" && <div className="notice warning" role="status" aria-live="polite"><AlertCircle /><span><strong>Local engine unavailable</strong><small>Check that the local converter is running, then try again.</small></span><button className="button secondary" onClick={() => void retry()}><RefreshCw size={15} /> Retry</button></div>}
+        {connection === "checking" && <p className="connection-message" role="status" aria-live="polite"><LoaderCircle className="spin" size={15} /> Checking local engine…</p>}
+        {!result && <>
         <section className="converter-card" aria-labelledby="upload-title">
-          <div className="section-heading"><div><span className="step">01</span><h2 id="upload-title">Choose a document</h2><p>One supported file, up to {MAX_CLIENT_FILE_MB} MB.</p></div></div>
-          <FileDropzone file={file} disabled={processing} onSelect={selectFile} onError={setError} />
-          <div className="quick-settings">
-            <label>Converter<select value={options.converter} onChange={(event) => setOptions({...options, converter: event.target.value as ConverterName})}><option value="auto">Auto</option><option value="pymupdf4llm">PyMuPDF4LLM</option><option value="docling">Docling</option><option value="markitdown">MarkItDown</option></select></label>
-            <label>Mode<select value={options.mode} onChange={(event) => setOptions({...options, mode: event.target.value as ConversionMode})}><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="high_accuracy">High Accuracy</option></select></label>
-          </div>
-          {error && <div className="inline-error" role="alert"><AlertCircle size={18} />{error}</div>}
-          <div className="convert-row"><span>{connection === "connected" ? "Ready for local conversion" : "Connect the local engine to continue"}</span><button className="button primary convert-button" onClick={() => void convert()} disabled={!file || connection !== "connected" || processing}>{processing ? <><LoaderCircle className="spin" size={18} /> Converting document…</> : "Convert Document"}</button></div>
-          {processing && <div className="progress" role="status"><span /> Inspecting, converting, structuring Markdown, and finalizing. Complex documents can take several minutes.</div>}
+          {processing ? <div className="processing-card" role="status" aria-live="polite"><LoaderCircle className="spin" size={28} /><span className="eyebrow">Conversion in progress</span><h2 id="upload-title">Converting {file?.name}</h2><p>{settingsSummary(options)}</p><div className="progress"><span /></div><small>{elapsed}s elapsed · Complex documents may take several minutes.</small></div> : <>
+            <div className="section-heading"><div><span className="step">01</span><h2 id="upload-title">{file ? "Document selected" : "Choose a document"}</h2><p>One supported file, up to {MAX_CLIENT_FILE_MB} MB.</p></div></div>
+            <FileDropzone file={file} disabled={false} onSelect={selectFile} onError={setError} />
+            {error && <div className="inline-error" role="alert"><AlertCircle size={18} />{error}</div>}
+            <div className="convert-row"><button className="settings-summary" onClick={() => setSettingsOpen(true)}>{settingsSummary(options)} <ChevronRight size={15} /></button><button className="button primary convert-button" onClick={() => void convert()} disabled={!file || connection !== "connected"}>Convert to Markdown</button></div>
+          </>}
         </section>
-        {result && <ResultViewer result={result} apiUrl={normalizeApiUrl(apiUrl)} />}
-        <footer><LockKeyhole size={14} /> No telemetry, cloud storage, or external document upload.</footer>
+        </>}
+        {error && result && <div className="inline-error" role="alert"><AlertCircle size={18} />{error}</div>}
+        {result && <ResultViewer result={result} apiUrl={normalizeApiUrl(apiUrl)} onReset={() => { setFile(null); setResult(null); setError(null); }} />}
+        <footer><LockKeyhole size={14} /> Processed locally on this computer.</footer>
       </div>
     </main>
   );
 }
 
 function ConnectionBadge({ state }: { state: ConnectionState }) {
-  return <span className={`connection ${state}`}>{state === "connected" ? <CheckCircle2 /> : state === "checking" ? <LoaderCircle className="spin" /> : <AlertCircle />}<span>{state === "connected" ? "Connected" : state === "checking" ? "Checking…" : "Disconnected"}</span></span>;
+  return <span className={`connection ${state}`} role="status" aria-live="polite">{state === "connected" ? <CheckCircle2 /> : state === "checking" ? <LoaderCircle className="spin" /> : <AlertCircle />}<span>{state === "connected" ? "Local engine connected" : state === "checking" ? "Checking…" : "Engine unavailable"}</span></span>;
+}
+
+function settingsSummary(options: ConversionOptions): string {
+  const converter = options.converter === "auto" ? "Auto" : options.converter === "pymupdf4llm" ? "PyMuPDF4LLM" : options.converter === "markitdown" ? "MarkItDown" : "Docling";
+  const mode = options.mode === "high_accuracy" ? "High Accuracy" : options.mode[0].toUpperCase() + options.mode.slice(1);
+  const ocr = options.ocr === "auto" ? "OCR Auto" : options.ocr === "force" ? "OCR Force" : "OCR Off";
+  return `${converter} · ${mode} · ${ocr}`;
 }
