@@ -70,11 +70,16 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
     @application.exception_handler(RequestValidationError)
     async def validation_error_handler(
-        _request: Request, _exc: RequestValidationError
+        request: Request, _exc: RequestValidationError
     ) -> JSONResponse:
-        payload = ErrorResponse(
-            error=ErrorBody(code="INVALID_FILE", message="A supported file is required.")
-        )
+        if request.url.path == "/api/convert-url":
+            payload = ErrorResponse(
+                error=ErrorBody(code="INVALID_URL", message="Enter a valid public HTTP(S) URL.")
+            )
+        else:
+            payload = ErrorResponse(
+                error=ErrorBody(code="INVALID_FILE", message="A supported file is required.")
+            )
         return JSONResponse(content=payload.model_dump(), status_code=422)
 
     @application.get("/api/health", response_model=HealthResponse)
