@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     max_upload_mb: int = Field(default=100, ge=1, le=1000)
+    max_webpage_mb: int = Field(default=10, ge=1, le=50)
+    max_web_image_mb: int = Field(default=8, ge=1, le=25)
+    max_web_images: int = Field(default=8, ge=0, le=25)
+    web_connect_timeout_seconds: float = Field(default=8, ge=1, le=30)
+    web_total_timeout_seconds: float = Field(default=20, ge=3, le=120)
+    web_redirect_limit: int = Field(default=5, ge=0, le=10)
+    web_cache_ttl_hours: int = Field(default=6, ge=1, le=168)
     allowed_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -37,6 +44,14 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_webpage_bytes(self) -> int:
+        return self.max_webpage_mb * 1024 * 1024
+
+    @property
+    def max_web_image_bytes(self) -> int:
+        return self.max_web_image_mb * 1024 * 1024
 
 
 @lru_cache

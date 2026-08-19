@@ -1,6 +1,6 @@
 # Unified Markdown Converter
 
-A fast, CPU-first local document converter that intelligently routes files through PyMuPDF4LLM, Docling, or MarkItDown to produce clean, portable Markdown and structured assets.
+A fast, CPU-first local converter that turns files and public webpages into clean, portable Markdown and structured assets.
 
 ---
 
@@ -74,8 +74,22 @@ In V1, the converter supports the following input file extensions:
 * **Office Documents**: Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`).
 * **Web & Structured Text**: HTML (`.html`, `.htm`), CSV (`.csv`).
 * **Plain Text & Markdown**: Text (`.txt`), Markdown (`.md`).
+* **Public Webpages**: Readable HTTP(S) articles and documentation pages, extracted locally with Defuddle.
+* **Direct Document URLs**: PDF, DOCX, PPTX, and XLSX links are downloaded with strict limits and routed through the existing file engines.
 
 *Note: In V1, PyMuPDF4LLM and Docling engine routes are dedicated to PDF processing, while non-PDF formats are routed through MarkItDown.*
+
+### URL → Markdown
+
+Select **URL**, paste a public article or documentation URL, and choose whether useful content
+images should be ignored or preserved. The backend performs a bounded fetch, extracts the main
+readable content locally with Defuddle, passes it through the canonical Markdown layer, and adds
+the final source URL near the top of the document. Preserved images use the existing `assets/`
+output contract.
+
+Authenticated, CAPTCHA-protected, paywalled, and heavily JavaScript-rendered pages are
+intentionally outside V1 scope. No Chromium, browser automation, hosted extraction API, or LLM
+rewriting is used.
 
 ---
 
@@ -149,6 +163,13 @@ The system decouples the web user interface from the local document conversion e
                          Result (.md + assets/)
 ```
 
+URL input follows a separate lightweight adapter path:
+
+```text
+Public URL → Safe bounded fetch → Defuddle Web Extractor → Canonical Markdown → .md + assets/
+Direct document URL ─────────────────→ Existing file router ────────────────┘
+```
+
 * **Decoupled Architecture**: The frontend can run locally or via a Vercel deployment.
 * **Local Backend Execution**: All document parsing and OCR take place on your local CPU. The browser sends HTTP requests directly to `http://127.0.0.1:8000`.
 * **Zero Cloud Dependency**: Documents never pass through Vercel servers or external cloud LLM APIs.
@@ -181,7 +202,7 @@ Once initial setup is complete, daily usage requires no command line interaction
 
 1. **Start Windows**: The background converter service starts automatically in the background.
 2. **Open Web App**: Open your pinned local frontend (`http://localhost:3000`) or hosted UI.
-3. **Convert File**: Drag and drop a document, keeping **Auto** engine and **Balanced** mode selected for normal use.
+3. **Convert**: Drag and drop a document, or switch to **URL** and paste a public webpage link.
 4. **Export Result**: Preview rendered Markdown / math, and download the Markdown file or ZIP package.
 
 ### Managing the Backend Service
@@ -219,18 +240,25 @@ This interactive script provides options to check service **Status**, **Start**,
    cd ..
    ```
 
-3. **Prefetch offline OCR & layout models**:
+3. **Install frontend and local Defuddle dependencies**:
+   ```powershell
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+4. **Prefetch offline OCR & layout models**:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\prefetch-models.ps1
    ```
 
-4. **Register Windows background autostart & launch backend**:
+5. **Register Windows background autostart & launch backend**:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
    .\scripts\start-backend.bat
    ```
 
-5. **Verify Backend Health**:
+6. **Verify Backend Health**:
    Navigating to `http://127.0.0.1:8000/api/health` in your browser should return:
    ```json
    {"status":"ok","service":"unified-markdown-converter"}
@@ -305,6 +333,7 @@ The backend exposes a minimal RESTful API over HTTP loopback (`http://127.0.0.1:
 
 * `GET /api/health`: Returns service health status.
 * `POST /api/convert`: Accepts multipart form uploads and returns Markdown content and download URLs.
+* `POST /api/convert-url`: Accepts a public URL plus image/cache preferences.
 * `GET /api/results/{result_id}/markdown`: Downloads the output `.md` file.
 * `GET /api/results/{result_id}/package`: Downloads the `.zip` archive containing `.md` and `assets/`.
 * `GET /api/results/{result_id}/assets/{asset_name}`: Serves individual asset images.
@@ -334,6 +363,10 @@ All errors use a standardized response format:
   }
 }
 ```
+
+URL fetching accepts HTTP(S) only and blocks localhost, private/link-local/non-public IP addresses,
+including every redirect target. It also enforces TLS verification, connection/total timeouts,
+redirect limits, response/content-type limits, and bounded image downloads.
 
 ---
 
@@ -374,6 +407,7 @@ npm run build
 * **CPU Speed Dependencies**: Docling conversion on complex scanned PDFs depends heavily on host CPU thread count.
 * **No Vision Language Model**: Local VLM image descriptions are not bundled to prevent excessive RAM/CPU usage.
 * **Local Backend Dependency**: The web UI requires the FastAPI service running locally on `127.0.0.1:8000`.
+* **Lightweight Web Extraction**: Login, paywall, CAPTCHA, and pages whose meaningful content exists only after client-side rendering are not supported.
 
 ---
 

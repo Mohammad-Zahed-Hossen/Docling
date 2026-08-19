@@ -8,6 +8,7 @@ OcrMode = Literal["auto", "off", "force"]
 ImageMode = Literal["ignore", "extract"]
 DescriptionMode = Literal["off", "smart", "all"]
 CpuMode = Literal["balanced", "maximum"]
+InputType = Literal["file", "url"]
 
 
 @dataclass(frozen=True)
@@ -59,3 +60,19 @@ class UnifiedResult:
     warnings: list[str]
     cache_hit: bool
     fallback_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class UrlInput:
+    url: str
+    input_type: InputType = "url"
+
+
+@dataclass
+class WebExtractionResult:
+    title: str | None
+    markdown: str
+    source_url: str
+    author: str | None = None
+    published_at: str | None = None
+    warnings: list[str] = field(default_factory=list)

@@ -1,7 +1,9 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -19,7 +21,10 @@ from .schemas import (
     ErrorBody,
     ErrorResponse,
     HealthResponse,
+    UrlConversionRequest,
 )
+from .web_extractor import WebExtractor
+from .web_fetcher import WebError, fetch_url, write_direct_document
 
 logger = logging.getLogger("docling_api")
 SUPPORTED = {".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".csv", ".txt", ".md"}
@@ -55,6 +60,11 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
     @application.exception_handler(ApiError)
     async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
+        payload = ErrorResponse(error=ErrorBody(code=exc.code, message=exc.message))
+        return JSONResponse(content=payload.model_dump(), status_code=exc.status_code)
+
+    @application.exception_handler(WebError)
+    async def web_error_handler(_request: Request, exc: WebError) -> JSONResponse:
         payload = ErrorResponse(error=ErrorBody(code=exc.code, message=exc.message))
         return JSONResponse(content=payload.model_dump(), status_code=exc.status_code)
 
@@ -161,6 +171,61 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
             package_url=f"/api/results/{result_id}/package",
             metadata=metadata,
         )
+
+    @application.post("/api/convert-url", response_model=ConversionResponse)
+    async def convert_url(request: UrlConversionRequest) -> ConversionResponse:
+        await run_in_threadpool(store.prune_expired)
+        result_id, job_dir, result_dir = store.create_job()
+        started = time.perf_counter()
+        active = application.state.engine
+        try:
+            fetched = await run_in_threadpool(fetch_url, request.url, app_settings)
+            if not active.lock.acquire(blocking=False):
+                raise ApiError(409, "BACKEND_BUSY", "The converter is already processing a document.")
+            try:
+                if fetched.document_suffix:
+                    input_path = await run_in_threadpool(write_direct_document, fetched, job_dir)
+                    stem = safe_stem(Path(urlsplit(fetched.final_url).path).name or "document")
+                    options = ConversionOptions(images=request.images, cache=request.cache)
+                    artifacts = await run_in_threadpool(active.convert, input_path, result_dir, stem, options)
+                    artifacts.engine_reason = f"Direct {fetched.document_suffix[1:].upper()} URL detected. {artifacts.engine_reason}"
+                else:
+                    extractor = WebExtractor(app_settings)
+                    provisional_stem = safe_stem(Path(urlsplit(fetched.final_url).path).name or "webpage")
+                    key = active.web_cache_key(fetched.final_url, request.images, extractor.version)
+                    artifacts = active.restore_web_cache(key, result_dir, provisional_stem, started) if request.cache else None
+                    if artifacts is None:
+                        extraction = await run_in_threadpool(extractor.extract, fetched.content, fetched.final_url, result_dir, request.images)
+                        stem = safe_stem(extraction.title or provisional_stem)
+                        artifacts = await run_in_threadpool(active.finalize_web, extraction, result_dir, stem, started, key if request.cache else None)
+            finally:
+                active.lock.release()
+        except (ApiError, WebError):
+            store.cleanup_result(result_dir)
+            raise
+        except Exception:
+            store.cleanup_result(result_dir)
+            logger.exception("URL conversion failed")
+            raise ApiError(500, "WEB_EXTRACTION_FAILED", "Readable content could not be extracted from this page.") from None
+        finally:
+            store.cleanup_job(job_dir)
+        metadata = ConversionMetadata(
+            original_filename=fetched.final_url,
+            output_filename=artifacts.markdown_path.name,
+            pages=artifacts.pages,
+            processing_seconds=artifacts.processing_seconds,
+            figures=artifacts.figures,
+            table_images=artifacts.table_images,
+            engine=artifacts.engine,
+            engine_reason=artifacts.engine_reason,
+            warnings=artifacts.warnings,
+            cache_hit=artifacts.cache_hit,
+            fallback_reason=artifacts.fallback_reason,
+            input_type="url",
+            source_url=fetched.final_url,
+            source_domain=urlsplit(fetched.final_url).hostname,
+        )
+        return ConversionResponse(result_id=result_id, markdown=artifacts.markdown, markdown_url=f"/api/results/{result_id}/markdown", package_url=f"/api/results/{result_id}/package", metadata=metadata)
 
     @application.get("/api/results/{result_id}/markdown")
     async def download_markdown(result_id: str) -> FileResponse:

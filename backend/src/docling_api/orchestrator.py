@@ -13,7 +13,7 @@ from .converter import DoclingEngine
 from .engines import DoclingAdapter, MarkItDownEngine, PyMuPDFEngine, normalize_assets
 from .inspector import inspect_pdf
 from .markdown import canonicalize, quality_issues, validate
-from .models import ConversionOptions, DocumentProfile, UnifiedResult
+from .models import ConversionOptions, DocumentProfile, UnifiedResult, WebExtractionResult
 
 logger = logging.getLogger("docling_api.performance")
 PDF = ".pdf"
@@ -28,6 +28,44 @@ class UnifiedConverter:
         self._markitdown: MarkItDownEngine | None = None
         self.cache_root = settings.temp_directory / "cache"
         self.cache_root.mkdir(parents=True, exist_ok=True)
+
+    def finalize_web(self, extraction: WebExtractionResult, result_dir: Path, output_stem: str, started: float, cache_key: str | None = None) -> UnifiedResult:
+        attribution = [f"> Source: {extraction.source_url}"]
+        if extraction.author:
+            attribution.append(f"> Author: {extraction.author}")
+        if extraction.published_at:
+            attribution.append(f"> Published: {extraction.published_at}")
+        title = f"# {extraction.title}\n\n" if extraction.title else ""
+        body = extraction.markdown
+        if extraction.title:
+            body = re.sub(rf"^#{{1,2}}\s+{re.escape(extraction.title)}\s*\n+", "", body, count=1, flags=re.I)
+        normalized = canonicalize(f"{title}{chr(10).join(attribution)}\n\n{body}")
+        normalized, figures, tables = normalize_assets(normalized, result_dir)
+        normalized, validation_warnings = validate(normalized, result_dir)
+        warnings = [*extraction.warnings, *validation_warnings]
+        markdown_path = result_dir / f"{output_stem}.md"
+        markdown_path.write_text(normalized, encoding="utf-8")
+        package_path = result_dir / f"{output_stem}.zip"
+        self._package(markdown_path, result_dir / "assets", package_path)
+        reason = "Public webpage content extracted locally with Defuddle."
+        self._write_manifest(result_dir, "web-extractor", reason, None, figures, tables, warnings, None)
+        if cache_key:
+            self._store_cache(cache_key, result_dir)
+        return UnifiedResult(normalized, markdown_path, package_path, None, round(time.perf_counter() - started, 2), figures, tables, "web-extractor", reason, warnings, False)
+
+    def web_cache_key(self, url: str, images: str, extractor_version: str) -> str:
+        payload = {"url": url, "images": images, "extractor": extractor_version}
+        return "web-" + hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+    def restore_web_cache(self, key: str, result_dir: Path, stem: str, started: float) -> UnifiedResult | None:
+        source = self.cache_root / key
+        if not source.is_dir():
+            return None
+        if time.time() - source.stat().st_mtime > self.settings.web_cache_ttl_hours * 3600:
+            shutil.rmtree(source, ignore_errors=True)
+            return None
+        shutil.copytree(source, result_dir, dirs_exist_ok=True)
+        return self._read_cached(result_dir, stem, started, "web-extractor", "Public webpage content extracted locally with Defuddle.")
 
     def convert(
         self, input_path: Path, result_dir: Path, output_stem: str, options: ConversionOptions

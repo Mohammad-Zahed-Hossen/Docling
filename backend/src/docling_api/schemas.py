@@ -29,6 +29,9 @@ class ConversionMetadata(BaseModel):
     warnings: list[str] = []
     cache_hit: bool = False
     fallback_reason: str | None = None
+    input_type: Literal["file", "url"] = "file"
+    source_url: str | None = None
+    source_domain: str | None = None
 
 
 class ConversionResponse(BaseModel):
@@ -37,3 +40,9 @@ class ConversionResponse(BaseModel):
     markdown_url: str
     package_url: str
     metadata: ConversionMetadata
+
+
+class UrlConversionRequest(BaseModel):
+    url: str
+    images: Literal["ignore", "extract"] = "extract"
+    cache: bool = True

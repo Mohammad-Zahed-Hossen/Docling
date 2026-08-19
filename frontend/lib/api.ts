@@ -70,6 +70,26 @@ export async function convertDocument(apiUrl: string, file: File, options: Conve
   return (await response.json()) as ConversionResult;
 }
 
+export async function convertUrl(apiUrl: string, url: string, options: ConversionOptions): Promise<ConversionResult> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(resultUrl(apiUrl, "/api/convert-url"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url.trim(), images: options.images, cache: options.cache }),
+    }, CONVERSION_TIMEOUT_MS);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw new LocalEngineError("The webpage request timed out.", "TIMEOUT");
+    throw new LocalEngineError("Could not connect to the local converter.", "LOCAL_ENGINE_ERROR");
+  }
+  if (!response.ok) {
+    let payload: ApiErrorPayload = {};
+    try { payload = (await response.json()) as ApiErrorPayload; } catch { /* non-JSON response */ }
+    throw new LocalEngineError(payload.error?.message ?? `The local engine returned HTTP ${response.status}.`, payload.error?.code ?? "LOCAL_ENGINE_ERROR");
+  }
+  return (await response.json()) as ConversionResult;
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeout: number): Promise<Response> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeout);

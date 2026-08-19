@@ -30,6 +30,7 @@ export function ResultViewer({ result, apiUrl, onReset }: { result: ConversionRe
         <div><dt>Table images</dt><dd>{result.metadata.table_images}</dd></div>
       </dl>
       <p className="engine-reason">{result.metadata.engine_reason}{result.metadata.cache_hit ? " Cached result." : ""}</p>
+      {result.metadata.source_url && <p className="source-link">Source: <a href={result.metadata.source_url} target="_blank" rel="noopener noreferrer">{result.metadata.source_domain || result.metadata.source_url}</a></p>}
       {result.metadata.warnings.length > 0 && <details className="result-warnings"><summary><AlertTriangle size={15} /> {result.metadata.warnings.length} {result.metadata.warnings.length === 1 ? "warning" : "warnings"}</summary><ul>{result.metadata.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
       <div className="viewer-tabs" role="tablist" aria-label="Result view">
         <button role="tab" aria-selected={tab === "preview"} onClick={() => setTab("preview")}>Preview</button>
@@ -41,7 +42,7 @@ export function ResultViewer({ result, apiUrl, onReset }: { result: ConversionRe
           <MarkdownContent markdown={result.markdown} assetBase={assetBase} />
         </article>
       ) : <pre className="raw-markdown"><code>{result.markdown}</code></pre>}
-      <div className="download-footer"><span><Download size={15} /> Downloads remain available until the local engine clears this result.</span><button className="text-button" onClick={onReset}><RotateCcw size={14} /> Convert another file</button></div>
+      <div className="download-footer"><span><Download size={15} /> Downloads remain available until the local engine clears this result.</span><button className="text-button" onClick={onReset}><RotateCcw size={14} /> Convert another input</button></div>
     </section>
   );
 }
@@ -50,4 +51,4 @@ const MarkdownContent = memo(function MarkdownContent({ markdown, assetBase }: {
   return <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} urlTransform={(url) => url.startsWith("assets/") ? `${assetBase}${url}` : defaultUrlTransform(url)}>{markdown}</ReactMarkdown>;
 });
 
-function engineLabel(engine: string): string { return engine === "pymupdf4llm" ? "PyMuPDF4LLM" : engine === "markitdown" ? "MarkItDown" : "Docling"; }
+function engineLabel(engine: string): string { return engine === "web-extractor" ? "Web Extractor" : engine === "pymupdf4llm" ? "PyMuPDF4LLM" : engine === "markitdown" ? "MarkItDown" : "Docling"; }
