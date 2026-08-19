@@ -1,4 +1,5 @@
 export type ConnectionState = "checking" | "connected" | "disconnected";
+export type AppTheme = "solarized-light" | "light" | "dark" | "system";
 export type ConverterName = "auto" | "pymupdf4llm" | "docling" | "markitdown";
 export type ConversionMode = "fast" | "balanced" | "high_accuracy";
 export interface ConversionOptions { converter: ConverterName; mode: ConversionMode; ocr: "auto" | "off" | "force"; images: "ignore" | "extract"; image_descriptions: "off" | "smart" | "all"; cpu: "balanced" | "maximum"; cache: boolean; }

@@ -2,9 +2,9 @@
 
 import { AlertCircle, CheckCircle2, ChevronRight, LoaderCircle, LockKeyhole, RefreshCw, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { checkHealthWithRetry, convertDocument, LocalEngineError, normalizeApiUrl } from "@/lib/api";
-import { API_URL_STORAGE_KEY, DEFAULT_API_URL, MAX_CLIENT_FILE_MB, OPTIONS_STORAGE_KEY, STARTUP_HEALTH_ATTEMPTS, STARTUP_HEALTH_DELAY_MS } from "@/lib/constants";
-import type { ConnectionState, ConversionOptions, ConversionResult } from "@/lib/types";
+import { checkHealth, checkHealthWithRetry, convertDocument, LocalEngineError, normalizeApiUrl } from "@/lib/api";
+import { API_URL_STORAGE_KEY, AUTO_RECONNECT_INTERVAL_MS, DEFAULT_API_URL, MAX_CLIENT_FILE_MB, OPTIONS_STORAGE_KEY, STARTUP_HEALTH_ATTEMPTS, STARTUP_HEALTH_DELAY_MS, THEME_STORAGE_KEY } from "@/lib/constants";
+import type { AppTheme, ConnectionState, ConversionOptions, ConversionResult } from "@/lib/types";
 import { MarkIcon } from "@/components/ui/icons";
 import { FileDropzone } from "./file-dropzone";
 import { ResultViewer } from "./result-viewer";
@@ -13,6 +13,7 @@ import { SettingsPanel } from "./settings-panel";
 export function ConverterWorkspace() {
   const [apiUrl, setApiUrlState] = useState(DEFAULT_API_URL);
   const [connection, setConnection] = useState<ConnectionState>("checking");
+  const [theme, setThemeState] = useState<AppTheme>("solarized-light");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -31,7 +32,17 @@ export function ConverterWorkspace() {
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem(API_URL_STORAGE_KEY);
       const storedOptions = window.localStorage.getItem(OPTIONS_STORAGE_KEY);
-      const initial = stored || DEFAULT_API_URL;
+      const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) as AppTheme | null;
+      const initial = stored?.trim() || DEFAULT_API_URL;
+      const activeTheme: AppTheme = storedTheme || "solarized-light";
+      
+      setThemeState(activeTheme);
+      if (activeTheme === "system") {
+        document.documentElement.removeAttribute("data-theme");
+      } else {
+        document.documentElement.setAttribute("data-theme", activeTheme);
+      }
+
       if (storedOptions) {
         try { setOptions((current) => ({ ...current, ...JSON.parse(storedOptions) as Partial<ConversionOptions> })); } catch { /* Ignore stale preferences. */ }
       }
@@ -42,10 +53,33 @@ export function ConverterWorkspace() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (connection !== "disconnected") return;
+    const interval = window.setInterval(async () => {
+      try {
+        const healthy = await checkHealth(normalizeApiUrl(apiUrl));
+        if (healthy) setConnection("connected");
+      } catch {
+        /* Local engine is still booting up */
+      }
+    }, AUTO_RECONNECT_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [connection, apiUrl]);
+
+  useEffect(() => {
     if (!processing) return;
     const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, [processing]);
+
+  const updateTheme = (newTheme: AppTheme) => {
+    setThemeState(newTheme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    if (newTheme === "system") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", newTheme);
+    }
+  };
 
   const updateApiUrl = (value: string) => { setApiUrlState(value); window.localStorage.setItem(API_URL_STORAGE_KEY, value); setConnection("disconnected"); };
   const reset = () => { updateApiUrl(DEFAULT_API_URL); void retry(DEFAULT_API_URL); };
@@ -69,9 +103,9 @@ export function ConverterWorkspace() {
         <div className="header-actions"><ConnectionBadge state={connection} /><button className="settings-button" onClick={() => setSettingsOpen(true)} aria-label="Open settings" aria-haspopup="dialog"><Settings size={17} /><span>Settings</span></button></div>
       </header>
       <div className="workspace">
-        <SettingsPanel open={settingsOpen} apiUrl={apiUrl} onApiUrlChange={updateApiUrl} onReset={reset} onClose={() => setSettingsOpen(false)} onRetry={() => void retry()} options={options} onOptionsChange={updateOptions} />
+        <SettingsPanel open={settingsOpen} apiUrl={apiUrl} onApiUrlChange={updateApiUrl} onReset={reset} onClose={() => setSettingsOpen(false)} onRetry={() => void retry()} options={options} onOptionsChange={updateOptions} theme={theme} onThemeChange={updateTheme} />
         {!result && !processing && <section className="intro"><span className="eyebrow"><LockKeyhole size={14} /> Processed locally</span><h1>Documents to clean Markdown</h1><p>Drop one document, choose how it should be converted, then inspect or download the result.</p></section>}
-        {connection === "disconnected" && <div className="notice warning" role="status" aria-live="polite"><AlertCircle /><span><strong>Local engine unavailable</strong><small>Check that the local converter is running, then try again.</small></span><button className="button secondary" onClick={() => void retry()}><RefreshCw size={15} /> Retry</button></div>}
+        {connection === "disconnected" && <div className="notice warning" role="status" aria-live="polite"><AlertCircle /><span><strong>Local engine unavailable</strong><small>Auto-retrying connection in background… Check that the local converter is running.</small></span><button className="button secondary" onClick={() => void retry()}><RefreshCw size={15} /> Retry now</button></div>}
         {connection === "checking" && <p className="connection-message" role="status" aria-live="polite"><LoaderCircle className="spin" size={15} /> Checking local engine…</p>}
         {!result && <>
         <section className="converter-card" aria-labelledby="upload-title">
