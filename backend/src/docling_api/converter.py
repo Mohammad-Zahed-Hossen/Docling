@@ -27,7 +27,6 @@ class DoclingEngine:
     def __init__(self) -> None:
         options = PdfPipelineOptions()
         options.generate_picture_images = True
-        options.generate_page_images = True
         self._converter = DocumentConverter(
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
         )
