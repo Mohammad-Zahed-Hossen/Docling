@@ -63,7 +63,7 @@ export async function convertDocument(apiUrl: string, file: File, options: Conve
     let payload: ApiErrorPayload = {};
     try { payload = (await response.json()) as ApiErrorPayload; } catch { /* non-JSON response */ }
     throw new LocalEngineError(
-      payload.error?.message ?? `The local engine returned HTTP ${response.status}.`,
+      getErrorMessage(response, payload, false),
       payload.error?.code ?? "LOCAL_ENGINE_ERROR",
     );
   }
@@ -85,9 +85,24 @@ export async function convertUrl(apiUrl: string, url: string, options: Conversio
   if (!response.ok) {
     let payload: ApiErrorPayload = {};
     try { payload = (await response.json()) as ApiErrorPayload; } catch { /* non-JSON response */ }
-    throw new LocalEngineError(payload.error?.message ?? `The local engine returned HTTP ${response.status}.`, payload.error?.code ?? "LOCAL_ENGINE_ERROR");
+    throw new LocalEngineError(
+      getErrorMessage(response, payload, true),
+      payload.error?.code ?? "LOCAL_ENGINE_ERROR",
+    );
   }
   return (await response.json()) as ConversionResult;
+}
+
+function getErrorMessage(response: Response, payload: ApiErrorPayload, isUrlMode: boolean): string {
+  if (payload.error?.message) return payload.error.message;
+  if (typeof payload.detail === "string") return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail[0]?.msg) return payload.detail[0].msg;
+  if (response.status === 404) {
+    return isUrlMode
+      ? "The URL conversion endpoint (/api/convert-url) was not found on the local engine (HTTP 404). Please ensure the backend engine is running."
+      : "The document conversion endpoint (/api/convert) was not found on the local engine (HTTP 404). Please ensure the backend engine is running.";
+  }
+  return `The local engine returned HTTP ${response.status}.`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeout: number): Promise<Response> {

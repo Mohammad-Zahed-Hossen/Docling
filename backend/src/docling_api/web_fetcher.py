@@ -78,6 +78,8 @@ def fetch_url(url: str, settings: Settings, *, image: bool = False) -> FetchResu
                         continue
                     if response.status_code in {401, 403}:
                         raise WebError(403, "ACCESS_DENIED", "This page could not be accessed as public webpage content.")
+                    if response.status_code == 404:
+                        raise WebError(404, "URL_NOT_FOUND", "The webpage at this URL was not found (HTTP 404).")
                     if response.status_code >= 400:
                         raise WebError(400, "URL_FETCH_FAILED", "The webpage could not be fetched.")
                     content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()

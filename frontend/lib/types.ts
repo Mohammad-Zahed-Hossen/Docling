@@ -32,4 +32,6 @@ export interface ConversionResult {
 
 export interface ApiErrorPayload {
   error?: { code?: string; message?: string };
+  detail?: string | Array<{ msg?: string }>;
 }
+

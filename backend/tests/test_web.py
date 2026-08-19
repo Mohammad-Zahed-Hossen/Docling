@@ -80,3 +80,16 @@ def test_direct_pdf_url_uses_existing_pipeline(tmp_path: Path, monkeypatch) -> N
     assert result["metadata"]["engine"] == "pymupdf4llm"
     assert "Direct PDF URL detected" in result["metadata"]["engine_reason"]
     assert result["metadata"]["source_url"] == "https://example.com/paper.pdf"
+
+
+def test_url_not_found_returns_404(tmp_path: Path, monkeypatch) -> None:
+    def mock_fetch_url(*_args, **_kwargs):
+        raise WebError(404, "URL_NOT_FOUND", "The webpage at this URL was not found (HTTP 404).")
+
+    monkeypatch.setattr("docling_api.main.fetch_url", mock_fetch_url)
+    with TestClient(create_app(Settings(temp_directory=tmp_path))) as client:
+        response = client.post("/api/convert-url", json={"url": "https://example.com/nonexistent"})
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "URL_NOT_FOUND"
+    assert "was not found (HTTP 404)" in response.json()["error"]["message"]
+
