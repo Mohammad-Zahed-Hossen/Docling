@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.uv-python/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Runtime artifacts
+runtime/
+output/
+output_assets/
+
+# Environment and local configuration
+.env
+.env.local
+.env.*.local
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
