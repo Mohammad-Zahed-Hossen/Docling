@@ -2,9 +2,20 @@
 param()
 
 $StartupDirectory = [Environment]::GetFolderPath("Startup")
-$EntryPath = Join-Path $StartupDirectory "Docling Local Engine.cmd"
-if (Test-Path -LiteralPath $EntryPath) {
-    Remove-Item -LiteralPath $EntryPath -Force
+$CmdEntryPath = Join-Path $StartupDirectory "Docling Local Engine.cmd"
+$VbsEntryPath = Join-Path $StartupDirectory "Docling Local Engine.vbs"
+
+$Removed = $false
+if (Test-Path -LiteralPath $CmdEntryPath) {
+    Remove-Item -LiteralPath $CmdEntryPath -Force
+    $Removed = $true
+}
+if (Test-Path -LiteralPath $VbsEntryPath) {
+    Remove-Item -LiteralPath $VbsEntryPath -Force
+    $Removed = $true
+}
+
+if ($Removed) {
     Write-Host "Removed Docling auto-start." -ForegroundColor Green
 } else {
     Write-Host "Docling auto-start was not installed."
