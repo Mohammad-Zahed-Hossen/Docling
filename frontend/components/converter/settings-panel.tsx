@@ -58,7 +58,6 @@ export function SettingsPanel({ open, apiUrl, onApiUrlChange, onReset, onClose, 
       <fieldset><legend>Output</legend>
       <div className="quick-settings">
         <label>Images<select value={options.images} onChange={(e) => onOptionsChange({...options, images: e.target.value as ConversionOptions["images"]})}><option value="extract">Extract</option><option value="ignore">Ignore</option></select></label>
-        {inputType === "file" && <label>Image descriptions<select value={options.image_descriptions} onChange={(e) => onOptionsChange({...options, image_descriptions: e.target.value as ConversionOptions["image_descriptions"]})}><option value="off">Off</option><option value="smart">Smart</option><option value="all">All</option></select></label>}
       </div></fieldset>
       <fieldset><legend>Performance</legend>
       <div className="quick-settings">

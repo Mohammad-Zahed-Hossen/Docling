@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 EngineName = Literal["auto", "pymupdf4llm", "docling", "markitdown"]
 ModeName = Literal["fast", "balanced", "high_accuracy"]
@@ -11,13 +11,31 @@ CpuMode = Literal["balanced", "maximum"]
 InputType = Literal["file", "url"]
 
 
+class ImageDescriptionProvider(Protocol):
+    @property
+    def available(self) -> bool:
+        ...
+
+    def describe(self, image_path: Path, context: str | None = None) -> str | None:
+        ...
+
+
+class DisabledImageDescriptionProvider:
+    @property
+    def available(self) -> bool:
+        return False
+
+    def describe(self, image_path: Path, context: str | None = None) -> str | None:
+        return None
+
+
 @dataclass(frozen=True)
 class ConversionOptions:
     engine: EngineName = "auto"
     mode: ModeName = "balanced"
     ocr: OcrMode = "auto"
     images: ImageMode = "extract"
-    image_descriptions: DescriptionMode = "off"
+    image_descriptions: DescriptionMode = "off"  # Deprecated internally
     cpu: CpuMode = "balanced"
     cache: bool = True
 

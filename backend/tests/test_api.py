@@ -13,7 +13,11 @@ from docling_api.models import UnifiedResult
 def test_health(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "unified-markdown-converter"}
+    assert response.json() == {
+        "status": "ok",
+        "service": "unified-markdown-converter",
+        "capabilities": {"image_descriptions": False},
+    }
 
 
 def test_rejects_unsupported_format(client: TestClient) -> None:
@@ -120,3 +124,30 @@ def test_default_engine_is_initialized_once_in_lifespan(tmp_path: Path, monkeypa
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/health").status_code == 200
     assert created == 1
+
+
+def test_legacy_image_descriptions_normalized(tmp_path: Path) -> None:
+    class MockEngine:
+        lock = Lock()
+
+        def convert(self, _input: Path, result_dir: Path, stem: str, options) -> UnifiedResult:
+            md_path = result_dir / f"{stem}.md"
+            md_path.write_text("# Test", encoding="utf-8")
+            zip_path = result_dir / f"{stem}-docling.zip"
+            with ZipFile(zip_path, "w") as archive:
+                archive.write(md_path, md_path.name)
+            assert options.image_descriptions == "off"
+            return UnifiedResult(
+                "# Test", md_path, zip_path, 1, 0.1, 0, 0, "pymupdf4llm", "Digital PDF.", [], False
+            )
+
+    app = create_app(Settings(temp_directory=tmp_path), engine=MockEngine())
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/convert",
+            data={"image_descriptions": "smart"},
+            files={"file": ("A Paper.pdf", b"%PDF-1.7\n", "application/pdf")},
+        )
+        assert response.status_code == 200
+        warnings = str(response.json()["metadata"]["warnings"])
+        assert "Local image descriptions are not configured" not in warnings

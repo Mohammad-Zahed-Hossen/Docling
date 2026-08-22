@@ -320,8 +320,8 @@ When a matching digest is found in `.cache/`:
 ## Image & VLM Behavior
 
 * **Image Extraction**: Extracted figures and tables are organized into `assets/` with relative Markdown tags (`![caption](assets/figure-001.png)`).
-* **Image Descriptions**: The UI includes settings for `Off`, `Smart`, and `All`. 
-* **VLM Model Status**: This repository **does not bundle or download a Vision Language Model (VLM)**. Selecting `Smart` or `All` preserves existing document captions and returns a warning: `"Local image descriptions are not configured; captions were preserved."` This intentional design keeps the installation lightweight and avoids heavy CPU vision inference.
+* **Caption Preservation**: Figures and available source captions are preserved in output Markdown.
+* **VLM Architecture**: Local AI-generated image descriptions are not currently part of the active conversion pipeline to keep installation lightweight and CPU-focused. The backend retains a clean `ImageDescriptionProvider` extension point for optional local VLM-based figure enrichment in a future release.
 
 ---
 
@@ -331,7 +331,7 @@ The backend exposes a minimal RESTful API over HTTP loopback (`http://127.0.0.1:
 
 ### Endpoints
 
-* `GET /api/health`: Returns service health status.
+* `GET /api/health`: Returns service health status and active capability flags (`capabilities: {"image_descriptions": false}`).
 * `POST /api/convert`: Accepts multipart form uploads and returns Markdown content and download URLs.
 * `POST /api/convert-url`: Accepts a public URL plus image/cache preferences.
 * `GET /api/results/{result_id}/markdown`: Downloads the output `.md` file.
@@ -345,9 +345,9 @@ The backend exposes a minimal RESTful API over HTTP loopback (`http://127.0.0.1:
 * `mode`: `balanced` (default), `fast`, `high_accuracy`.
 * `ocr`: `auto` (default), `off`, `force`.
 * `images`: `extract` (default), `ignore`.
-* `image_descriptions`: `off` (default), `smart`, `all`.
 * `cpu`: `balanced` (default), `maximum`.
 * `cache`: `true` (default), `false`.
+* `image_descriptions`: Deprecated parameter, safely normalized to `off`.
 
 ### Concurrency & Error Format
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     service: Literal["unified-markdown-converter"] = "unified-markdown-converter"
+    capabilities: dict[str, bool] = {"image_descriptions": False}
 
 
 class ErrorBody(BaseModel):

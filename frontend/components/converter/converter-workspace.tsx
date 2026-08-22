@@ -10,7 +10,7 @@ import { FileDropzone } from "./file-dropzone";
 import { ResultViewer } from "./result-viewer";
 import { SettingsPanel } from "./settings-panel";
 
-const DEFAULT_OPTIONS: ConversionOptions = { converter: "auto", mode: "balanced", ocr: "auto", images: "extract", image_descriptions: "off", cpu: "balanced", cache: true };
+const DEFAULT_OPTIONS: ConversionOptions = { converter: "auto", mode: "balanced", ocr: "auto", images: "extract", cpu: "balanced", cache: true };
 
 export function ConverterWorkspace() {
   const [apiUrl, setApiUrlState] = useState(DEFAULT_API_URL);

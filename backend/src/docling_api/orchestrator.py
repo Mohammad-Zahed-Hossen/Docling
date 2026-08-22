@@ -13,19 +13,34 @@ from .converter import DoclingEngine
 from .engines import DoclingAdapter, MarkItDownEngine, PyMuPDFEngine, normalize_assets
 from .inspector import inspect_pdf
 from .markdown import canonicalize, quality_issues, validate
-from .models import ConversionOptions, DocumentProfile, UnifiedResult, WebExtractionResult
+from .models import (
+    ConversionOptions,
+    DisabledImageDescriptionProvider,
+    DocumentProfile,
+    ImageDescriptionProvider,
+    UnifiedResult,
+    WebExtractionResult,
+)
 
 logger = logging.getLogger("docling_api.performance")
 PDF = ".pdf"
 
 
 class UnifiedConverter:
-    def __init__(self, settings: Settings, docling: DoclingEngine | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        docling: DoclingEngine | None = None,
+        image_description_provider: ImageDescriptionProvider | None = None,
+    ) -> None:
         self.settings = settings
         self.lock = Lock()
         self._docling = DoclingAdapter(docling) if docling else None
         self._pymupdf = PyMuPDFEngine()
         self._markitdown: MarkItDownEngine | None = None
+        self.image_description_provider = (
+            image_description_provider or DisabledImageDescriptionProvider()
+        )
         self.cache_root = settings.temp_directory / "cache"
         self.cache_root.mkdir(parents=True, exist_ok=True)
 
@@ -109,8 +124,6 @@ class UnifiedConverter:
         normalized, figures, tables = normalize_assets(normalized, result_dir)
         normalized, validation_warnings = validate(normalized, result_dir)
         warnings = [*result.warnings, *validation_warnings]
-        if options.image_descriptions != "off":
-            warnings.append("Local image descriptions are not configured; captions were preserved.")
         markdown_path = result_dir / f"{output_stem}.md"
         markdown_path.write_text(normalized, encoding="utf-8")
         package_path = result_dir / f"{output_stem}.zip"
@@ -184,10 +197,12 @@ class UnifiedConverter:
         return self._markitdown
 
     def _cache_key(self, path: Path, options: ConversionOptions, engine: str) -> str:
-        digest = hashlib.sha256(path.read_bytes())
-        digest.update(
-            json.dumps({**options.__dict__, "engine_result": engine}, sort_keys=True).encode()
-        )
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            while chunk := source.read(65536):
+                digest.update(chunk)
+        opts = {**options.__dict__, "image_descriptions": "off", "engine_result": engine}
+        digest.update(json.dumps(opts, sort_keys=True).encode())
         return digest.hexdigest()
 
     def _restore_cache(self, key: str, result_dir: Path) -> bool:

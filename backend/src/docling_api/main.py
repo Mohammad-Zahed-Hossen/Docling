@@ -84,7 +84,7 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
     @application.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
-        return HealthResponse()
+        return HealthResponse(capabilities={"image_descriptions": False})
 
     @application.post("/api/convert", response_model=ConversionResponse)
     async def convert(
@@ -117,7 +117,7 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
             mode=mode,
             ocr=ocr,
             images=images,
-            image_descriptions=image_descriptions,
+            image_descriptions="off",  # Safely normalize deprecated smart/all to off
             cpu=cpu,
             cache=cache,
         )  # type: ignore[arg-type]
